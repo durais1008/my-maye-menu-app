@@ -50,6 +50,11 @@
     -->
     <MusicFloatingBtn />
 
+    <!-- 访问计数器 -->
+    <div class="visit-counter reveal">
+      👁️ 已有 <span class="visit-count-num">{{ visitCount }}</span> 次访问
+    </div>
+
     <!--
       ==================== 模块 1：顶部导航栏 ====================
       :current-tab    → 告诉导航栏当前选中了哪个标签（用于高亮）
@@ -124,6 +129,11 @@
     <LegendSection v-if="currentMainTab === 'legend'" />
 
     <!--
+      ==================== 模块 3.5：AI 智能厨房 ====================
+    -->
+    <RecipeAI v-if="currentMainTab === 'recipe'" />
+
+    <!--
       ==================== 模块 4：马也简介 ====================
       v-if → 只有当前标签是 'intro' 时才渲染
       目前是施工中的占位页面
@@ -148,8 +158,13 @@ import HomeCarousel from './components/HomeCarousel.vue'
 import MenuGrid from './components/MenuGrid.vue'
 import CartPanel from './components/CartPanel.vue'
 import LegendSection from './components/LegendSection.vue'
+import RecipeAI from './components/RecipeAI.vue'
 import IntroSection from './components/IntroSection.vue'
 import { useScrollReveal } from './composables/useScrollReveal.js'
+import { useVisitorCount } from './composables/useVisitorCount.js'
+
+// ==================== 访问计数器 ====================
+const { visitCount } = useVisitorCount()
 
 // ==================== 全局导航状态 ====================
 
@@ -440,6 +455,23 @@ button[class*="pwd-btn"]:hover {
   /* 毛玻璃模糊效果 → 背景图透过容器时变模糊 */
   -webkit-backdrop-filter: blur(10px);
   color: #D7E2EA;
-  /* 全局默认文字色 → 迷雾白 */
 }
+
+/* ==================== 访问计数器 ==================== */
+.visit-counter {
+  text-align: center;
+  font-family: 'Kanit', 'Noto Sans SC', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(215, 226, 234, 0.55);
+  padding: 0 0 8px;
+  letter-spacing: 0.5px;
+}
+
+.visit-count-num {
+  color: #FF6B35;
+  font-weight: 700;
+  font-size: 16px;
+}
+
 </style>

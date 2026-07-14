@@ -34,6 +34,7 @@ defineEmits(['tab-change'])
 const navItems = [
   { key: 'menu',   label: '马也菜单', icon: '' },
   { key: 'legend', label: '马也传奇', icon: '' },
+  { key: 'recipe', label: 'AI厨房',  icon: '' },
   { key: 'intro',  label: '马也简介', icon: '' }
 ]
 </script>

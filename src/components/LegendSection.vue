@@ -56,16 +56,13 @@
         </div>
 
         <div
-          v-for="(post, index) in blogPosts"
+          v-for="post in blogPosts"
           :key="post.id"
-          :class="['blog-card', 'reveal', 'card-3d', `reveal-delay-${(index % 5) + 1}`]"
         >
-          <div class="blog-header">
-            <h3 class="blog-title">{{ post.title }}</h3>
-            <button @click="handleDelete(post.id)" class="delete-blog-btn">删除</button>
-          </div>
-          <span class="blog-date">{{ post.date }}</span>
-          <p class="blog-content">{{ post.content }}</p>
+          <BlogCard
+            :post="post"
+            @delete="handleDelete"
+          />
         </div>
       </div>
     </div>
@@ -75,7 +72,9 @@
 <script setup>
 import { ref } from 'vue'
 import { useSupabase } from '../composables/useSupabase.js'
+import BlogCard from './BlogCard.vue'
 
+// 直接初始化 Supabase
 const { blogPosts, isPublishing, fetchPosts, publishPost, deletePost } = useSupabase()
 
 const isUnlocked = ref(false)
@@ -85,11 +84,22 @@ const SECRET_CODE = '5201314'
 const newTitle = ref('')
 const newContent = ref('')
 
-const checkPassword = () => {
+/**
+ * checkPassword —— 验证密码
+ * 正确后解锁并拉取云端博客
+ */
+const checkPassword = async () => {
   if (inputPassword.value === SECRET_CODE) {
     isUnlocked.value = true
     inputPassword.value = ''
-    fetchPosts()
+    // 拉取博客并捕获错误
+    try {
+      await fetchPosts()
+      console.log('✅ 博客数据拉取成功，共', blogPosts.value.length, '篇')
+    } catch (err) {
+      console.error('❌ 拉取博客失败:', err)
+      alert('拉取博客失败，请检查控制台（F12）查看错误详情。')
+    }
   } else {
     alert('密码好像不太对哦！再试一次？')
     inputPassword.value = ''
@@ -258,74 +268,6 @@ const handleDelete = (id) => { deletePost(id) }
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-/* 博客卡片（玻璃态） */
-.blog-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 20px;
-  transition: all 0.3s ease;
-}
-
-.blog-card:hover {
-  border-color: rgba(255, 107, 53, 0.30);
-}
-
-.blog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.blog-title {
-  margin: 0 0 10px 0;
-  font-family: 'Kanit', 'Noto Sans SC', sans-serif;
-  font-weight: 700;
-  font-size: 17px;
-  color: #D7E2EA;
-}
-
-/* 删除按钮 */
-.delete-blog-btn {
-  background: rgba(255, 68, 68, 0.15);
-  color: rgba(255, 100, 100, 0.85);
-  border: 1px solid rgba(255, 68, 68, 0.25);
-  padding: 5px 12px;
-  font-size: 12px;
-  font-family: 'Kanit', 'Noto Sans SC', sans-serif;
-  font-weight: 600;
-  border-radius: 50px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.delete-blog-btn:hover {
-  background: rgba(255, 68, 68, 0.30);
-  border-color: rgba(255, 68, 68, 0.50);
-}
-
-/* 日期标签 */
-.blog-date {
-  display: inline-block;
-  background: linear-gradient(135deg, #FF6B35, #E03E3E);
-  color: #FFFFFF;
-  padding: 4px 12px;
-  font-size: 11px;
-  font-family: 'Kanit', 'Noto Sans SC', sans-serif;
-  font-weight: 600;
-  border-radius: 50px;
-  margin-bottom: 14px;
-}
-
-/* 正文 */
-.blog-content {
-  line-height: 1.7;
-  margin: 0;
-  color: rgba(215, 226, 234, 0.75);
-  font-size: 14px;
-  white-space: pre-wrap;
 }
 
 /* 空状态 */
