@@ -1,423 +1,300 @@
+<!--
+  =====================================================================
+  App.vue — 应用根组件（总指挥中心）
+  =====================================================================
+
+  【角色定位】
+    这个文件是整个应用的"组装车间"，职责只有三个：
+      1. 管理全局导航状态（用户当前在哪个页面）
+      2. 管理购物车数据（点菜 → 购物车 → 导出订单）
+      3. 组装所有子组件，像搭积木一样拼出完整页面
+
+  【组件树结构】
+    App.vue（根）
+    ├── MusicFloatingBtn   → 音乐播放器
+    ├── MainNavBar         → 顶部导航（马也菜单 / 马也传奇 / 马也简介）
+    ├── [马也菜单模块]（v-if="currentMainTab === 'menu'"）
+    │   ├── SubNavBar      → 二级导航（首页 / 点菜 / 已选）
+    │   ├── HomeCarousel   → 今日推荐轮播图
+    │   ├── MenuGrid       → 菜品菜单网格
+    │   └── CartPanel      → 购物车 + 订单导出
+    ├── [马也传奇模块]（v-if="currentMainTab === 'legend'"）
+    │   └── LegendSection  → 密码验证 + 博客系统
+    └── [马也简介模块]（v-if="currentMainTab === 'intro'"）
+        └── IntroSection   → 占位页面
+
+  【如何修改某个模块？】
+    想要修改轮播图 → 打开 src/components/HomeCarousel.vue
+    想要修改博客系统 → 打开 src/components/LegendSection.vue
+    想要修改数据库逻辑 → 打开 src/composables/useSupabase.js
+    想要修改整体布局 → 就在这个文件里改
+
+  【数据流向】
+    App.vue（数据源）──Props──→ 子组件（接收数据）
+                           ←── Emit（事件通知）──
+    例如：App.vue 把 cart 数组传给 CartPanel 显示，
+          CartPanel 通过 emit('remove-from-cart') 告诉 App.vue 删某道菜
+-->
+
 <template>
+  <!--
+    页面最外层容器
+    class="app-container" → 白色半透明内容区，最大宽度 600px，居中
+    背景图在全局样式中设置（见下方 <style> 块）
+  -->
   <div class="app-container">
 
-    <div 
-      class="music-float-btn" 
-      :class="{ 'is-playing': isPlaying }" 
-      @click="toggleMusic"
-    >
-      💿
-    </div>
-    
-    <header class="main-nav-bar">
-      <h1>MAYE'S WORLD</h1>
-      <div class="main-nav-links">
-        <button :class="{ active: currentMainTab === 'menu' }" @click="currentMainTab = 'menu'">马也菜单</button>
-        <button :class="{ active: currentMainTab === 'legend' }" @click="currentMainTab = 'legend'">马也传奇</button>
-        <button :class="{ active: currentMainTab === 'intro' }" @click="currentMainTab = 'intro'">马也简介</button>
-      </div>
-    </header>
+    <!--
+      ==================== 模块 0：音乐播放器 ====================
+      固定在右下角的悬浮按钮，独立工作，不依赖其他组件
+    -->
+    <MusicFloatingBtn />
 
-    <!-- 模块一：马也菜单 -->
+    <!--
+      ==================== 模块 1：顶部导航栏 ====================
+      :current-tab    → 告诉导航栏当前选中了哪个标签（用于高亮）
+      @tab-change     → 监听用户点击了哪个标签，更新 currentMainTab
+      $event          → Vue 的魔法变量，代表子组件 emit 传过来的值
+    -->
+    <MainNavBar
+      :current-tab="currentMainTab"
+      @tab-change="currentMainTab = $event"
+    />
+
+    <!--
+      ==================== 模块 2：马也菜单 ====================
+      v-if → 只有当前标签是 'menu' 时才渲染
+            （切换到其他标签时，这个区域会被销毁，切换回来时重新创建）
+    -->
     <div v-if="currentMainTab === 'menu'">
-      <div class="sub-nav-bar">
-        <h2>🍽️ 厨房</h2>
-        <div class="nav-links">
-          <button :class="{ active: currentMenuView === 'home' }" @click="currentMenuView = 'home'">首页</button>
-          <button :class="{ active: currentMenuView === 'menu' }" @click="currentMenuView = 'menu'">点菜</button>
-          <button :class="{ active: currentMenuView === 'cart' }" @click="currentMenuView = 'cart'">
-            已选 ({{ cart.length }})
-          </button>
-        </div>
-      </div>
-      
-      <main v-if="currentMenuView === 'home'" class="view-section">
-        <h2>今日推荐</h2>
-        <div class="carousel" ref="carouselRef">
-          <img v-for="(img, index) in homeImages" :key="index" :src="img" alt="轮播图" class="carousel-img" />
-        </div>
-      </main>
 
-      <main v-if="currentMenuView === 'menu'" class="view-section">
-        <h2>主厨菜单</h2>
-        <div class="menu-grid">
-          <div v-for="item in menuItems" :key="item.id" class="food-card">
-            <img :src="item.image" :alt="item.name" class="food-img" />
-            <div class="food-info">
-              <span class="name">{{ item.name }}</span>
-            </div>
-            <button class="add-btn" @click="addToCart(item)">想吃这个！</button>
-          </div>
-        </div>
-      </main>
+      <!--
+        二级导航栏
+        :current-view  → 当前二级页面（home / menu / cart）
+        :cart-count    → 购物车里有多少道菜，显示在"已选"按钮上
+        @view-change   → 用户点击二级导航时，更新 currentMenuView
+      -->
+      <SubNavBar
+        :current-view="currentMenuView"
+        :cart-count="cart.length"
+        @view-change="currentMenuView = $event"
+      />
 
-      <main v-if="currentMenuView === 'cart'" class="view-section">
-        <div id="receipt-area" class="receipt-box">
-          <h2 class="receipt-title">💖 专属订单 / VIP ORDER</h2>
-          <div v-if="cart.length === 0" class="empty-cart">还没有选好今天要吃什么哦...</div>
-          <div v-for="(item, index) in cart" :key="index" class="cart-item">
-            <span>{{ item.name }}</span>
-            <div class="cart-item-right">
-              <button class="delete-btn hide-on-export" @click="removeFromCart(index)">×</button>
-            </div>
-          </div>
-          <div class="receipt-footer" v-if="cart.length > 0">
-            <span>全场免单 · 主厨马上准备！</span>
-          </div>
-        </div>
-        <button v-if="cart.length > 0" @click="exportReceipt" class="export-btn">发送给主厨 (导出订单)</button>
-      </main>
+      <!--
+        首页：今日推荐轮播图
+        v-if → 只有二级页面是 'home' 时才显示
+        :images → 传入轮播图片路径数组
+      -->
+      <HomeCarousel
+        v-if="currentMenuView === 'home'"
+        :images="homeImages"
+      />
+
+      <!--
+        点菜页：菜品菜单网格
+        v-if → 只有二级页面是 'menu' 时才显示
+        :items → 传入菜品数据数组（每项包含 id, name, image）
+        @add-to-cart → 用户点"想吃这个"时，把菜品加入购物车
+      -->
+      <MenuGrid
+        v-if="currentMenuView === 'menu'"
+        :items="menuItems"
+        @add-to-cart="addToCart"
+      />
+
+      <!--
+        购物车页：已选订单 + 导出功能
+        v-if → 只有二级页面是 'cart' 时才显示
+        :cart → 传入购物车数组
+        @remove-from-cart → 用户点 × 删除某道菜时，从购物车移除
+      -->
+      <CartPanel
+        v-if="currentMenuView === 'cart'"
+        :cart="cart"
+        @remove-from-cart="removeFromCart"
+      />
     </div>
 
-    <!-- 模块二：马也传奇 -->
-    <div v-if="currentMainTab === 'legend'" class="view-section">
-      <h2>📖 马也传奇</h2>
-      
-      <!-- 未解锁：显示密码框 -->
-      <div v-if="!isLegendUnlocked" class="password-box">
-        <h3>🔒 访问受限</h3>
-        <p>这是我的私人领地，需要密码才能访问哦。</p>
-        <input type="password" v-model="inputPassword" @keyup.enter="checkPassword" placeholder="请输入密码" class="pwd-input" />
-        <button @click="checkPassword" class="pwd-btn">验证解锁</button>
-      </div>
+    <!--
+      ==================== 模块 3：马也传奇 ====================
+      v-if → 只有当前标签是 'legend' 时才渲染
+      LegendSection 自己管理所有的密码和博客逻辑，
+      App.vue 不需要关心内部细节，只需要"挂载"它
+    -->
+    <LegendSection v-if="currentMainTab === 'legend'" />
 
-      <!-- 已解锁：显示写博客和博客列表 -->
-      <div v-else class="legend-unlocked-area">
-  
-        <div class="admin-write-box">
-          <h3>✍️ 记录今天的生活</h3>
-          <input v-model="newPost.title" placeholder="写个吸引人的标题..." class="blog-input" />
-          <textarea v-model="newPost.content" placeholder="今天主厨又研究了什么新菜？还是有什么感悟？" rows="4" class="blog-textarea"></textarea>
-          <button @click="publishPost" :disabled="isPublishing" class="publish-btn">
-            {{ isPublishing ? '正在同步到云端...' : '公开发布传奇' }}
-          </button>
-        </div>
+    <!--
+      ==================== 模块 4：马也简介 ====================
+      v-if → 只有当前标签是 'intro' 时才渲染
+      目前是施工中的占位页面
+    -->
+    <IntroSection v-if="currentMainTab === 'intro'" />
 
-        <div class="blog-list">
-          <div v-if="blogPosts.length === 0" class="empty-cart">云端日记本还是空的，快去写第一篇吧！</div>
-
-          <div v-for="post in blogPosts" :key="post.id" class="blog-card">
-            <div class="blog-header">
-              <h3 class="blog-title">{{ post.title }}</h3>
-              <button @click="deletePost(post.id)" class="delete-blog-btn">删除</button>
-            </div>
-            <span class="blog-date">{{ post.date }}</span>
-            <p class="blog-content">{{ post.content }}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 模块三：马也简介 -->
-    <div v-if="currentMainTab === 'intro'" class="view-section">
-      <h2>🚧 马也简介</h2>
-      <div class="placeholder-box">
-        <p>自我介绍模块正在施工中，暂时搁置...</p>
-        <p>敬请期待！</p>
-      </div>
-    </div>
-
-    <audio ref="audioRef" loop src="/music/bgm.mp3"></audio>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
-import html2canvas from 'html2canvas';
+/**
+ * ==================== 导入子组件 ====================
+ *
+ * 每个 import 语句引入一个 .vue 文件，就像一个零件
+ * 把所有零件组装起来，就是完整的网页
+ */
+import { ref } from 'vue'
+import MusicFloatingBtn from './components/MusicFloatingBtn.vue'
+import MainNavBar from './components/MainNavBar.vue'
+import SubNavBar from './components/SubNavBar.vue'
+import HomeCarousel from './components/HomeCarousel.vue'
+import MenuGrid from './components/MenuGrid.vue'
+import CartPanel from './components/CartPanel.vue'
+import LegendSection from './components/LegendSection.vue'
+import IntroSection from './components/IntroSection.vue'
 
-// --- 全局路由 ---
-const currentMainTab = ref('menu'); 
-const currentMenuView = ref('home'); 
+// ==================== 全局导航状态 ====================
 
+/**
+ * currentMainTab：一级导航标签
+ * 可选值：'menu' | 'legend' | 'intro'
+ * 默认值 'menu' → 打开网站首先显示"马也菜单"
+ *
+ * 当用户点击顶部导航按钮时，MainNavBar 会 emit 'tab-change' 事件，
+ * 然后通过 @tab-change="currentMainTab = $event" 更新这个值
+ */
+const currentMainTab = ref('menu')
+
+/**
+ * currentMenuView：菜单模块下的二级页面
+ * 可选值：'home' | 'menu' | 'cart'
+ * 默认值 'home' → 进入菜单后先显示"今日推荐"
+ *
+ * 当用户点击二级导航按钮时，SubNavBar 会 emit 'view-change' 事件更新它
+ */
+const currentMenuView = ref('home')
+
+// ==================== 菜单数据 ====================
+
+/**
+ * homeImages：首页轮播图的图片列表
+ * 图片存放在 public/images/ 目录下
+ * 以后想换图，直接改这里的路径即可
+ */
 const homeImages = ref([
   '/images/马也红烩牛肉抱蛋.jpg',
   '/images/超美味咖喱饭.jpg',
   '/images/鲫鱼豆腐汤.jpg'
-]);
+])
 
+/**
+ * menuItems：主厨菜单的菜品数据
+ * 每道菜是一个对象，包含三个属性：
+ *   id    → 唯一标识（数字）
+ *   name  → 菜品名称（显示在卡片上）
+ *   image → 菜品图片路径（.webp 格式，比 jpg 更小更快）
+ *
+ * 如果要新增一道菜，只需在数组里加一个对象：
+ *   { id: 9, name: '新菜名', image: '/images/新菜名.webp' }
+ * 页面会自动显示新卡片，不需要改其他任何代码
+ */
 const menuItems = ref([
-  { id: 1, name: '马也红烩牛肉抱蛋', image: '/images/马也红烩牛肉抱蛋.webp' },
-  { id: 2, name: '超美味咖喱饭', image: '/images/超美味咖喱饭.webp' },
-  { id: 3, name: '萝卜炖牛肉丸', image: '/images/萝卜炖牛肉丸.webp' },
+  { id: 1, name: '马也红烩牛肉抱蛋',  image: '/images/马也红烩牛肉抱蛋.webp' },
+  { id: 2, name: '超美味咖喱饭',       image: '/images/超美味咖喱饭.webp' },
+  { id: 3, name: '萝卜炖牛肉丸',       image: '/images/萝卜炖牛肉丸.webp' },
   { id: 4, name: '韭菜炒蛋配黑椒牛肉', image: '/images/韭菜炒蛋配黑椒牛肉.webp' },
-  { id: 5, name: '鸡丝凉面', image: '/images/鸡丝凉面.webp' },
-  { id: 6, name: '小炒坤', image: '/images/小炒坤.webp' },
-  { id: 7, name: '巫毒饮料', image: '/images/巫毒饮料.webp' },
-  { id: 8, name: 'Damn Ber Fan', image: '/images/damn ber fan.webp' }
-]);
+  { id: 5, name: '鸡丝凉面',           image: '/images/鸡丝凉面.webp' },
+  { id: 6, name: '小炒坤',             image: '/images/小炒坤.webp' },
+  { id: 7, name: '巫毒饮料',           image: '/images/巫毒饮料.webp' },
+  { id: 8, name: 'Damn Ber Fan',      image: '/images/damn ber fan.webp' }
+])
 
-const cart = ref([]);
+// ==================== 购物车状态 ====================
 
-// --- 模块二：马也传奇状态与密码 ---
-const isLegendUnlocked = ref(false); 
-const inputPassword = ref('');       
-const SECRET_CODE = '5201314';       
+/**
+ * cart：购物车数组
+ * 初始值为空数组 [] → 用户啥都没选
+ * 用户点"想吃这个"时，通过 addToCart() 往里面加菜
+ * 用户点 × 时，通过 removeFromCart() 从里面删菜
+ *
+ * 这个数组被 CartPanel 和 SubNavBar 同时使用：
+ *   - SubNavBar 用 cart.length 显示"已选 (3)"
+ *   - CartPanel 用 cart 数组显示具体是哪些菜
+ */
+const cart = ref([])
 
-// --- 网站在线写入系统 (Supabase) ---
-// 注意：URL 只需要保留到 .co，后面的路径我已在 fetch 里补全
-const SUPABASE_URL = 'https://cwapbhxxcitzfvopgfnx.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3YXBiaHh4Y2l0emZ2b3BnZm54Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5NTMxNDYsImV4cCI6MjA5ODUyOTE0Nn0.MImSLwGwAmYKLoOOGHnEjKneXQbcO0QT0dkM5eQRh7Q';
+// ==================== 核心业务方法 ====================
 
-const blogPosts = ref([]); 
-const isPublishing = ref(false); 
-
-const newPost = ref({
-  title: '',
-  content: ''
-});
-
-// 1. 从云端拉取日记
-const fetchBlogsFromCloud = async () => {
-  try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/posts?select=*&order=id.desc`, {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`
-      }
-    });
-    const data = await response.json();
-    blogPosts.value = data; 
-  } catch (error) {
-    console.error('拉取日记失败:', error);
-  }
-};
-
-// 2. 密码正确解锁时触发拉取
-const checkPassword = () => {
-  if (inputPassword.value === SECRET_CODE) {
-    isLegendUnlocked.value = true;
-    inputPassword.value = ''; 
-    fetchBlogsFromCloud(); 
-  } else {
-    alert('密码好像不太对哦！再试一次？');
-    inputPassword.value = '';
-  }
+/**
+ * addToCart —— 把一道菜加入购物车
+ *
+ * @param {Object} item - 菜品对象 { id, name, image }
+ *
+ * push()：数组方法，在末尾追加一个新元素
+ * 因为 cart 是 ref 包裹的响应式数组，
+ * push 之后页面会自动更新（购物车数量、订单列表都会刷新）
+ */
+const addToCart = (item) => {
+  cart.value.push(item)  // .value：ref 包裹的值要通过 .value 访问
+  alert(`【${item.name}】已加入今日菜单！`)
 }
 
-// 3. 把新日记推送到云端
-const publishPost = async () => {
-  if (!newPost.value.title || !newPost.value.content) {
-    alert('标题和内容都不能为空哦！');
-    return;
-  }
-  
-  isPublishing.value = true;
-  const today = new Date().toISOString().split('T')[0];
-
-  try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/posts`, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify({
-        title: newPost.value.title,
-        content: newPost.value.content,
-        date: today
-      })
-    });
-
-    if (response.ok) {
-      alert('🎉 传奇发布成功！已同步至云数据库。');
-      newPost.value.title = '';
-      newPost.value.content = '';
-      await fetchBlogsFromCloud();
-    }
-  } catch (error) {
-    alert('发布失败，检查下网络？');
-  } finally {
-    isPublishing.value = false;
-  }
-};
-
-// 4. 从云端删除日记
-const deletePost = async (id) => {
-  const confirmDelete = confirm('确定要删除这篇传奇吗？删了就找不回了哦！');
-  if (!confirmDelete) return;
-
-  try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/posts?id=eq.${id}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`
-      }
-    });
-
-    if (response.ok) {
-      alert('🗑️ 删除成功！');
-      await fetchBlogsFromCloud(); 
-    }
-  } catch (error) {
-    alert('删除失败，请稍后再试。');
-  }
-};
-
-// --- 音乐控制系统 ---
-const audioRef = ref(null);   
-const isPlaying = ref(false); 
-
-const toggleMusic = () => {
-  if (isPlaying.value) {
-    audioRef.value.pause();
-  } else {
-    audioRef.value.play();
-  }
-  isPlaying.value = !isPlaying.value;
-};
-
-// --- 轮播图滚动引擎 ---
-const carouselRef = ref(null); 
-let scrollTimer = null;        
-
-const startAutoScroll = () => {
-  scrollTimer = setInterval(() => {
-    if (carouselRef.value) {
-      const container = carouselRef.value;
-      const scrollAmount = container.clientWidth; 
-      
-      if (container.scrollLeft + container.clientWidth >= container.scrollWidth - 10) {
-        container.scrollTo({ left: 0, behavior: 'smooth' });
-      } else {
-        container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-      }
-    }
-  }, 3000); 
-};
-
-// --- 生命周期钩子 ---
-onMounted(() => {
-  startAutoScroll();
-  const autoPlayBgm = () => {
-    if (!isPlaying.value && audioRef.value) {
-      audioRef.value.play().then(() => {
-        isPlaying.value = true;
-      }).catch(err => {
-        console.log("浏览器拦截机制触发:", err);
-      });
-    }
-    document.removeEventListener('click', autoPlayBgm);
-    document.removeEventListener('touchstart', autoPlayBgm);
-  };
-  document.addEventListener('click', autoPlayBgm);
-  document.addEventListener('touchstart', autoPlayBgm);
-});
-
-onUnmounted(() => {
-  if (scrollTimer) clearInterval(scrollTimer);
-});
-
-// --- 核心业务逻辑 ---
-const addToCart = (item) => {
-  cart.value.push(item);
-  alert(`【${item.name}】已加入今日菜单！`);
-};
-
+/**
+ * removeFromCart —— 从购物车中移除一道菜
+ *
+ * @param {number} index - 要删除的菜品在数组中的位置（从 0 开始）
+ *
+ * splice(index, 1)：数组方法，从 index 位置开始删除 1 个元素
+ * 例如：cart = ['牛肉', '咖喱', '凉面']
+ *       splice(1, 1) → 删除 '咖喱'，cart 变成 ['牛肉', '凉面']
+ */
 const removeFromCart = (index) => {
-  cart.value.splice(index, 1); 
-};
-
-const exportReceipt = () => {
-  const receiptElement = document.getElementById('receipt-area');
-  html2canvas(receiptElement, {
-    scale: 2, 
-    backgroundColor: '#ffffff'
-  }).then(canvas => {
-    const link = document.createElement('a');
-    link.download = '今日专属订单.png';
-    link.href = canvas.toDataURL('image/png'); 
-    link.click(); 
-  });
-};
+  cart.value.splice(index, 1)
+}
 </script>
 
+<!--
+  ==================== 全局样式（不加 scoped）====================
+  这里只定义影响整个页面的样式（如 body 背景图）
+  加了 scoped 的样式只影响当前组件，这里不加 scoped 就是为了让 body 生效
+-->
 <style>
-/* ================= 基础物理层 ================= */
+/* ---------- 页面背景 ---------- */
 body {
-  background-image: url('/images/background.jpg'); 
-  background-size: cover; 
-  background-position: center; 
-  background-attachment: fixed; 
-  margin: 0; 
+  background-image: url('/images/background.jpg');
+  /* background.jpg：页面背景图 */
+  background-size: cover;
+  /* cover：图片拉伸以完全覆盖屏幕，可能裁剪一部分 */
+  background-position: center;
+  /* center：图片居中显示 */
+  background-attachment: fixed;
+  /* fixed：背景图固定不动（滚动页面时背景不跟着走） */
+  margin: 0;
+  /* 去掉浏览器默认的 body 外边距 */
   padding: 0;
 }
 </style>
 
+<!--
+  ==================== 组件样式（scoped = 只影响当前组件内部）====================
+  scoped 是 Vue 的魔法属性：加了它，这里的 CSS 不会泄露到子组件
+  每个子组件有自己的 scoped 样式，互不干扰
+-->
 <style scoped>
-/* ================= 组件渲染层 ================= */
-.app-container { 
-  max-width: 600px; 
-  margin: 0 auto; 
-  padding: 20px; 
+/* ---------- 内容容器 ---------- */
+.app-container {
+  max-width: 600px;
+  /* 最大宽度 600px：在手机上撑满，在电脑上居中显示（不会太宽） */
+  margin: 0 auto;
+  /* margin: 0 auto → 上下为 0，左右自动 → 水平居中 */
+  padding: 20px;
+  /* 内边距 20px：内容和容器边缘留出呼吸空间 */
   font-family: 'Helvetica', sans-serif;
-  background-color: rgba(255, 255, 255, 0.85); 
-  min-height: 100vh; 
-  box-shadow: 0 0 20px rgba(0,0,0,0.1); 
+  /* 字体：优先用 Helvetica，没有就用系统默认的 sans-serif */
+  background-color: rgba(255, 255, 255, 0.85);
+  /* 半透明白色背景（0.85 = 85% 不透明）
+     透过这个白色可以看到 body 的背景图，但文字又清晰可读 */
+  min-height: 100vh;
+  /* 最小高度 = 整个视口高度（100vh = 100% viewport height）
+     保证即使内容很少，白色背景也铺满整个屏幕 */
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+  /* 淡淡的外阴影：0 水平偏移，0 垂直偏移，20px 模糊，10% 黑色 */
 }
-
-/* 音乐悬浮按钮样式 */
-.music-float-btn { position: fixed; bottom: 20px; right: 20px; z-index: 9999; width: clamp(40px, 8vw, 60px); height: clamp(40px, 8vw, 60px); font-size: clamp(20px, 4vw, 30px); border-radius: 50%; background-color: rgba(255, 255, 255, 0.9); display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25); cursor: pointer; transition: all 0.3s ease; }
-.music-float-btn:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
-@keyframes spinRecord { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-.music-float-btn.is-playing { animation: spinRecord 3s linear infinite; box-shadow: 0 0 20px rgba(0, 0, 0, 0.5); }
-
-/* 顶级导航栏样式 */
-.main-nav-bar { display: flex; justify-content: space-between; align-items: center; border-bottom: 4px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
-.main-nav-bar h1 { margin: 0; font-weight: 900; letter-spacing: -1px; font-size: 24px;}
-.main-nav-links button { background: none; border: 2px solid #000; padding: 8px 12px; margin-left: 5px; cursor: pointer; font-weight: bold; border-radius: 4px; transition: all 0.2s;}
-.main-nav-links button.active { background: #000; color: #fff; transform: translateY(-2px); box-shadow: 0 4px 0px #000;}
-
-/* 子导航样式 */
-.sub-nav-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 10px; background-color: rgba(0,0,0,0.05); border: 1px dashed #000;}
-.sub-nav-bar h2 { margin: 0; font-size: 18px; }
-.nav-links button { background: none; border: 1px solid #000; padding: 5px 10px; margin-left: 5px; cursor: pointer; font-weight: bold; }
-.nav-links button.active { background: #000; color: #fff; }
-
-.view-section h2 { border-left: 5px solid #000; padding-left: 10px; margin-bottom: 20px; }
-
-/* 轮播图、菜单网格、小票样式 */
-.carousel { display: flex; overflow-x: auto; gap: 15px; scroll-snap-type: x mandatory; padding-bottom: 10px; }
-.carousel-img { width: 100%; max-height: 250px; object-fit: cover; scroll-snap-align: start; border: 2px solid #000; flex-shrink: 0; }
-.menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-.food-card { border: 2px solid #000; display: flex; flex-direction: column; }
-.food-img { width: 100%; height: 150px; object-fit: cover; border-bottom: 2px solid #000; }
-.food-info { display: flex; justify-content: center; padding: 10px; font-weight: bold; font-size: 16px;}
-.add-btn { background: #000; color: #fff; border: none; padding: 10px; cursor: pointer; font-weight: bold; transition: background 0.2s; border-top: 2px solid #000; }
-.add-btn:hover { background: #333; }
-.receipt-box { border: 2px dashed #000; padding: 20px; background: #fff; margin-bottom: 20px; }
-.receipt-title { text-align: center; font-weight: 900; border-bottom: 2px solid #000; padding-bottom: 10px; margin-top: 0; border-left: none;}
-.cart-item { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #eee; font-weight: bold;}
-.cart-item-right { display: flex; align-items: center; gap: 10px; }
-.delete-btn { background: #ff4444; color: white; border: none; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; line-height: 18px; text-align: center;}
-.empty-cart { text-align: center; color: #888; padding: 20px; }
-.receipt-footer { text-align: center; margin-top: 20px; font-size: 14px; font-weight: 900; border-top: 2px solid #000; padding-top: 15px; letter-spacing: 1px;}
-.export-btn { width: 100%; background: #000; color: #fff; padding: 15px; font-size: 16px; font-weight: bold; border: none; cursor: pointer; }
-[data-html2canvas-ignore] .hide-on-export, .receipt-box[data-html2canvas-ignore] .hide-on-export { display: none !important; }
-
-
-/* ================= 密码框与博客样式 ================= */
-.password-box { text-align: center; padding: 40px 20px; border: 2px solid #000; background: #fff; }
-.pwd-input { padding: 10px; border: 2px solid #000; margin-bottom: 15px; width: 80%; font-size: 16px; text-align: center; font-weight: bold;}
-.pwd-btn { background: #000; color: #fff; border: none; padding: 10px 30px; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.2s;}
-.pwd-btn:hover { background: #333; }
-
-.admin-write-box { border: 3px solid #000; padding: 20px; background: #fff; margin-bottom: 30px; box-shadow: 6px 6px 0px #000; }
-.blog-input, .blog-textarea { width: 100%; box-sizing: border-box; border: 2px solid #000; padding: 10px; margin-bottom: 15px; font-size: 14px; font-family: inherit; }
-.blog-input:focus, .blog-textarea:focus { outline: none; background: #f9f9f9; }
-.publish-btn { background: #000; color: #fff; border: none; padding: 12px 24px; font-weight: bold; cursor: pointer; transition: 0.2s; width: 100%;}
-.publish-btn:disabled { background: #999; cursor: not-allowed; }
-
-.blog-list { display: flex; flex-direction: column; gap: 20px; }
-.blog-card { border: 2px solid #000; padding: 20px; background: #fff; box-shadow: 4px 4px 0px rgba(0,0,0,1); }
-.blog-header { display: flex; justify-content: space-between; align-items: flex-start;}
-.blog-title { margin: 0 0 10px 0; font-weight: 900; }
-.delete-blog-btn { background: #ff4444; color: #fff; border: 2px solid #000; padding: 3px 8px; font-size: 12px; font-weight: bold; cursor: pointer; transition: 0.2s;}
-.delete-blog-btn:hover { background: #cc0000; }
-.blog-date { display: inline-block; background: #000; color: #fff; padding: 3px 8px; font-size: 12px; font-weight: bold; margin-bottom: 15px; }
-.blog-content { line-height: 1.6; margin: 0; color: #333; white-space: pre-wrap;}
-
-.placeholder-box { text-align: center; padding: 50px; border: 2px dashed #999; color: #666; font-weight: bold;}
 </style>
