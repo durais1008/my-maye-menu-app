@@ -140,7 +140,7 @@
  * 每个 import 语句引入一个 .vue 文件，就像一个零件
  * 把所有零件组装起来，就是完整的网页
  */
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import MusicFloatingBtn from './components/MusicFloatingBtn.vue'
 import MainNavBar from './components/MainNavBar.vue'
 import SubNavBar from './components/SubNavBar.vue'
@@ -149,6 +149,7 @@ import MenuGrid from './components/MenuGrid.vue'
 import CartPanel from './components/CartPanel.vue'
 import LegendSection from './components/LegendSection.vue'
 import IntroSection from './components/IntroSection.vue'
+import { useScrollReveal } from './composables/useScrollReveal.js'
 
 // ==================== 全局导航状态 ====================
 
@@ -248,6 +249,55 @@ const addToCart = (item) => {
 const removeFromCart = (index) => {
   cart.value.splice(index, 1)
 }
+
+// ==================== 动效系统：滚动淡入 + 背景视差 ====================
+
+/**
+ * 初始化 scrollReveal 引擎
+ * observeAll() 会自动扫描页面上所有带 class="reveal" 的元素，
+ * 当它们进入可视区域时触发淡入动画
+ */
+const { observeAll, cleanup } = useScrollReveal()
+
+/**
+ * 背景视差效果：
+ * 监听页面滚动，微调背景图位置，产生"背景慢慢移动"的深度感
+ */
+let parallaxRaf = null  // requestAnimationFrame ID（用于性能优化）
+const handleParallax = () => {
+  // 用 requestAnimationFrame 确保在浏览器刷新帧时才计算（不浪费性能）
+  if (parallaxRaf) return
+  parallaxRaf = requestAnimationFrame(() => {
+    const scrollY = window.scrollY
+    // 背景图随滚动向下偏移 30% 速度 → 视差深度感
+    document.body.style.backgroundPositionY = `${scrollY * 0.3}px`
+    parallaxRaf = null
+  })
+}
+
+onMounted(() => {
+  // 启动滚动淡入观察
+  nextTick(() => observeAll())
+  // 启动背景视差
+  window.addEventListener('scroll', handleParallax, { passive: true })
+})
+
+/**
+ * 监听标签切换：
+ * v-if 会销毁/重建组件，新 DOM 元素带 .reveal 类但还没被观察，
+ * 所以每次切换后需要用 nextTick 等待 DOM 更新完成，再重新扫描
+ */
+watch([currentMainTab, currentMenuView], () => {
+  nextTick(() => observeAll())
+})
+
+onUnmounted(() => {
+  // 销毁观察器
+  cleanup()
+  // 移除视差监听
+  window.removeEventListener('scroll', handleParallax)
+  if (parallaxRaf) cancelAnimationFrame(parallaxRaf)
+})
 </script>
 
 <!--
@@ -256,19 +306,103 @@ const removeFromCart = (index) => {
   加了 scoped 的样式只影响当前组件，这里不加 scoped 就是为了让 body 生效
 -->
 <style>
-/* ---------- 页面背景 ---------- */
+/**
+ * ==================== 全局样式 ====================
+ *
+ * 设计风格：照片背景 × 玻璃态 × 橘红渐变 × 动效增强
+ */
+
+/* ---------- 页面背景 + 视差 ---------- */
 body {
   background-image: url('/images/background.jpg');
-  /* background.jpg：页面背景图 */
   background-size: cover;
-  /* cover：图片拉伸以完全覆盖屏幕，可能裁剪一部分 */
-  background-position: center;
-  /* center：图片居中显示 */
-  background-attachment: fixed;
-  /* fixed：背景图固定不动（滚动页面时背景不跟着走） */
+  background-position: center top;
+  background-attachment: scroll;
+  /* 改为 scroll → JS 视差控制 backgroundPositionY */
   margin: 0;
-  /* 去掉浏览器默认的 body 外边距 */
   padding: 0;
+}
+
+/* ==================== 滚动淡入动画系统 ==================== */
+/**
+ * .reveal：标记需要淡入动画的元素
+ * 初始状态 → 透明 + 下移 40px
+ */
+.reveal {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.7s cubic-bezier(0.22, 0.61, 0.36, 1),
+              transform 0.7s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/**
+ * .is-revealed：由 JS 在元素进入视口时自动添加
+ * 最终状态 → 完全不透明 + 回到原位置
+ */
+.reveal.is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 延迟变量：让多个元素依次出现，而不是一起弹出 */
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+.reveal-delay-4 { transition-delay: 0.4s; }
+.reveal-delay-5 { transition-delay: 0.5s; }
+
+/* ==================== 全局按钮悬浮发光 ==================== */
+/**
+ * 所有 <button> 和带 .btn-glow 的元素，
+ * 在 hover 时都会出现光晕 + 上浮效果
+ */
+@keyframes btnPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(255, 107, 53, 0.3); }
+  50%      { box-shadow: 0 0 20px rgba(255, 107, 53, 0.55); }
+}
+
+button {
+  transition: all 0.3s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(255, 107, 53, 0.35);
+}
+
+/* 主操作按钮（橘红渐变底）hover 发光增强 */
+button[class*="add-btn"]:hover,
+button[class*="export-btn"]:hover,
+button[class*="publish-btn"]:hover,
+button[class*="pwd-btn"]:hover {
+  animation: btnPulse 2s ease-in-out infinite;
+  filter: brightness(1.1);
+}
+
+/* ==================== 打字机光标闪烁 ==================== */
+@keyframes blinkCursor {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+
+.typewriter-cursor {
+  display: inline-block;
+  color: #FF6B35;
+  font-weight: 300;
+  animation: blinkCursor 0.8s ease-in-out infinite;
+}
+
+/* ==================== 3D 卡片悬浮 ==================== */
+.card-3d {
+  transition: transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1),
+              box-shadow 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.card-3d:hover {
+  transform: perspective(600px) rotateX(2deg) rotateY(-2deg) translateY(-4px);
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.45),
+    0 0 30px rgba(255, 107, 53, 0.15);
 }
 </style>
 
@@ -278,23 +412,34 @@ body {
   每个子组件有自己的 scoped 样式，互不干扰
 -->
 <style scoped>
-/* ---------- 内容容器 ---------- */
+/**
+ * ==================== 内容容器 ====================
+ *
+ * 玻璃态面板：
+ *   - 极低透明度的白色底 → 微妙的"毛玻璃"质感
+ *   - 半透白色边框 → 面板边界若隐若现
+ *   - 微弱的 box-shadow → 面板稍微"浮"在暗色背景上
+ */
 .app-container {
   max-width: 600px;
-  /* 最大宽度 600px：在手机上撑满，在电脑上居中显示（不会太宽） */
+  /* 移动端撑满，桌面端居中 */
   margin: 0 auto;
-  /* margin: 0 auto → 上下为 0，左右自动 → 水平居中 */
-  padding: 20px;
-  /* 内边距 20px：内容和容器边缘留出呼吸空间 */
-  font-family: 'Helvetica', sans-serif;
-  /* 字体：优先用 Helvetica，没有就用系统默认的 sans-serif */
-  background-color: rgba(255, 255, 255, 0.85);
-  /* 半透明白色背景（0.85 = 85% 不透明）
-     透过这个白色可以看到 body 的背景图，但文字又清晰可读 */
+  /* 水平居中 */
+  padding: 24px 20px;
+  /* 上下 24px，左右 20px */
+  font-family: 'Kanit', 'Noto Sans SC', sans-serif;
+  /* 字体栈：英文用 Kanit（几何现代感），中文用 Noto Sans SC（思源黑体） */
+  background-color: rgba(255, 255, 255, 0.12);
+  /* 半透明白色玻璃底 → 12% 不透明度，在照片背景上清晰可见 */
   min-height: 100vh;
-  /* 最小高度 = 整个视口高度（100vh = 100% viewport height）
-     保证即使内容很少，白色背景也铺满整个屏幕 */
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
-  /* 淡淡的外阴影：0 水平偏移，0 垂直偏移，20px 模糊，10% 黑色 */
+  /* 最小高度铺满整个视口 */
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  /* 左右两侧半透明边框 → 给容器"边界感" */
+  backdrop-filter: blur(10px);
+  /* 毛玻璃模糊效果 → 背景图透过容器时变模糊 */
+  -webkit-backdrop-filter: blur(10px);
+  color: #D7E2EA;
+  /* 全局默认文字色 → 迷雾白 */
 }
 </style>
